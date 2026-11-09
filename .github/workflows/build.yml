@@ -106,15 +106,33 @@ jobs:
           else
             cp sqfs/squashfs-tools/unsquashfs dist/epk2extract-windows-x86_64/unsquashfs.exe
           fi
-          # alle noetigen Cygwin-Laufzeit-DLLs portabel mitnehmen
-          for d in cygwin1.dll cygz.dll cyglzo2-2.dll cyggcc_s-seh-1.dll \
-                   cygstdc++-6.dll cygcrypto-1.1.dll cygcrypto-3.dll \
-                   cyglzma-5.dll cygbz2-1.dll cyglz4-1.dll cygzstd-1.dll; do
-            cp "/usr/bin/$d" dist/epk2extract-windows-x86_64/ 2>/dev/null || true
+          # ALLE benoetigten Cygwin-DLLs automatisch ermitteln (inkl. transitive)
+          # via cygcheck – kein Raten/Whack-a-mole mehr. Iterativ, bis stabil.
+          cygcheck_dlls() {
+            for e in dist/epk2extract-windows-x86_64/*.exe; do cygcheck "$e" 2>/dev/null; done \
+              | tr -d '\r' | grep -oiE '(/usr/bin/|[A-Za-z]:\\+cygwin[^ ]*\\+)cyg[A-Za-z0-9._+-]*\.dll'
+          }
+          for pass in 1 2 3; do
+            missing=0
+            cygcheck_dlls | sort -u | while read -r p; do
+              u="$p"; case "$p" in *\\*) u="$(cygpath -u "$p")";; esac
+              bn="$(basename "$u")"
+              [ -f "dist/epk2extract-windows-x86_64/$bn" ] || cp "$u" dist/epk2extract-windows-x86_64/ 2>/dev/null || true
+            done
           done
-          # HARTE Pruefung: beide Binaries muessen vorhanden sein
+          # Sicherheitsnetz: bekannte Pflicht-DLLs (inkl. iconv/intl) explizit
+          for d in cygwin1 cygz cyglzo2-2 cyggcc_s-seh-1 cygstdc++-6 cygcrypto-3 \
+                   cygcrypto-1.1 cyglzma-5 cygiconv-2 cygintl-8 cygbz2-1 cyglz4-1 cygzstd-1; do
+            cp "/usr/bin/$d.dll" dist/epk2extract-windows-x86_64/ 2>/dev/null || true
+          done
+          # HARTE Pruefung: beide Binaries + keine fehlende DLL mehr
           test -f dist/epk2extract-windows-x86_64/epk2extract.exe
           test -f dist/epk2extract-windows-x86_64/unsquashfs.exe
+          cd dist/epk2extract-windows-x86_64
+          if cygcheck ./epk2extract.exe 2>/dev/null | grep -qiE 'not found'; then
+            echo "FEHLER: epk2extract.exe hat noch fehlende DLLs:"; cygcheck ./epk2extract.exe | grep -iE 'not found'; exit 1
+          fi
+          cd "$(cygpath "$GITHUB_WORKSPACE")"
           echo "== Archiv-Inhalt (Binaries) =="; ls dist/epk2extract-windows-x86_64/ | grep -iE 'epk2extract\.exe|unsquashfs\.exe'
           tar czf dist/epk2extract-windows-x86_64.tar.gz -C dist epk2extract-windows-x86_64
       - uses: actions/upload-artifact@v4
