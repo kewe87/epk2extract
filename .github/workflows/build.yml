@@ -65,7 +65,9 @@ jobs:
         run: |
           set -euo pipefail
           cd "$(cygpath "$GITHUB_WORKSPACE")"
-          git clone --depth 1 https://github.com/plougher/squashfs-tools.git sqfs
+          # Stabilen Release-Tag nehmen (dev-Branch ist instabil: inline-xattr
+          # referenziert read_fs_bytes auch bei XATTR_SUPPORT=0 -> Link-Fehler).
+          git clone --depth 1 --branch 4.6.1 https://github.com/plougher/squashfs-tools.git sqfs
           # Cygwin-Portabilitaet: nprocessors_compat.c bindet bei Nicht-Linux
           # <sys/sysctl.h> ein (fehlt in Cygwin). Eigenen Cygwin-Zweig via
           # sysconf(_SC_NPROCESSORS_ONLN) vor den __linux__-Block setzen.
