@@ -32,46 +32,44 @@ jobs:
 
   windows:
     runs-on: windows-2022
-    defaults:
-      run:
-        shell: msys2 {0}
     steps:
       - uses: actions/checkout@v4
-      - uses: msys2/setup-msys2@v2
+      # epk2extract nutzt POSIX-Header (sys/mman.h, byteswap.h) -> Windows-Build
+      # geht upstream nur ueber Cygwin, nicht MinGW. build.sh erkennt Cygwin
+      # (OSTYPE=cygwin -> build_cygwin/) und kopiert die noetigen cyg*.dll rein.
+      - uses: cygwin/cygwin-install-action@v4
         with:
-          msystem: MINGW64
-          update: true
-          install: >-
-            mingw-w64-x86_64-cmake
-            mingw-w64-x86_64-gcc
-            mingw-w64-x86_64-make
-            mingw-w64-x86_64-lzo2
-            mingw-w64-x86_64-openssl
-            mingw-w64-x86_64-zlib
+          packages: >-
+            gcc-core
+            gcc-g++
+            cmake
+            make
+            liblzo2-devel
+            libssl-devel
+            zlib-devel
             squashfs-tools
-            tar
             git
       - name: Build
+        shell: C:\cygwin\bin\bash.exe --login -o igncr '{0}'
         run: |
-          mkdir -p build_mingw/obj
-          cd build_mingw/obj
-          cmake -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release ../..
-          mingw32-make -j2
+          cd "$(cygpath "$GITHUB_WORKSPACE")"
+          ./build.sh
       - name: Package
+        shell: C:\cygwin\bin\bash.exe --login -o igncr '{0}'
         run: |
+          cd "$(cygpath "$GITHUB_WORKSPACE")"
           mkdir -p dist/epk2extract-windows-x86_64
-          cp build_mingw/obj/src/epk2extract.exe dist/epk2extract-windows-x86_64/
-          cp -r keys dist/epk2extract-windows-x86_64/
-          # DLLs einsammeln (mingw-Deps)
-          for dll in libgcc_s_seh-1.dll libstdc++-6.dll libwinpthread-1.dll \
-                    liblzo2-2.dll libcrypto-3-x64.dll zlib1.dll; do
-            if [ -f "/mingw64/bin/$dll" ]; then
-              cp "/mingw64/bin/$dll" dist/epk2extract-windows-x86_64/
-            fi
-          done
-          # unsquashfs mitnehmen falls das Paket es liefert
+          # build_cygwin/ enthaelt epk2extract.exe + die portablen cyg*.dll
+          cp -r build_cygwin/* dist/epk2extract-windows-x86_64/
+          cp -r keys dist/epk2extract-windows-x86_64/ 2>/dev/null || true
+          # unsquashfs.exe + dessen Cygwin-Laufzeit-DLLs mitnehmen (portable)
           cp /usr/bin/unsquashfs.exe dist/epk2extract-windows-x86_64/ 2>/dev/null || true
-          cd dist && tar czf epk2extract-windows-x86_64.tar.gz epk2extract-windows-x86_64/
+          for d in cygwin1.dll cygz.dll cyglzo2-2.dll cyggcc_s-seh-1.dll \
+                   cygstdc++-6.dll cygcrypto-1.1.dll cygcrypto-3.dll \
+                   cyglzma-5.dll cygbz2-1.dll cyglz4-1.dll cygzstd-1.dll; do
+            cp "/usr/bin/$d" dist/epk2extract-windows-x86_64/ 2>/dev/null || true
+          done
+          tar czf dist/epk2extract-windows-x86_64.tar.gz -C dist epk2extract-windows-x86_64
       - uses: actions/upload-artifact@v4
         with:
           name: epk2extract-windows-x86_64
