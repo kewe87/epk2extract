@@ -37,6 +37,9 @@ jobs:
       # epk2extract nutzt POSIX-Header (sys/mman.h, byteswap.h) -> Windows-Build
       # geht upstream nur ueber Cygwin, nicht MinGW. build.sh erkennt Cygwin
       # (OSTYPE=cygwin -> build_cygwin/) und kopiert die noetigen cyg*.dll rein.
+      # Cygwin hat KEIN squashfs-tools-Paket -> unsquashfs bauen wir unten
+      # selbst aus plougher/squashfs-tools. liblzma/lz4/zstd-devel fuer die
+      # ueblichen SquashFS-Kompressionsvarianten (LG rootfs.pak nutzt i.d.R. XZ).
       - uses: cygwin/cygwin-install-action@v4
         with:
           packages: >-
@@ -47,13 +50,25 @@ jobs:
             liblzo2-devel
             libssl-devel
             zlib-devel
-            squashfs-tools
+            liblzma-devel
+            liblz4-devel
+            libzstd-devel
             git
-      - name: Build
+            wget
+      - name: Build epk2extract
         shell: C:\cygwin\bin\bash.exe --login -o igncr '{0}'
         run: |
           cd "$(cygpath "$GITHUB_WORKSPACE")"
           ./build.sh
+      - name: Build squashfs-tools (unsquashfs)
+        shell: C:\cygwin\bin\bash.exe --login -o igncr '{0}'
+        run: |
+          cd "$(cygpath "$GITHUB_WORKSPACE")"
+          git clone --depth 1 https://github.com/plougher/squashfs-tools.git sqfs
+          make -C sqfs/squashfs-tools \
+            GZIP_SUPPORT=1 XZ_SUPPORT=1 LZO_SUPPORT=1 LZ4_SUPPORT=1 ZSTD_SUPPORT=1 \
+            unsquashfs
+          ls -la sqfs/squashfs-tools/unsquashfs*
       - name: Package
         shell: C:\cygwin\bin\bash.exe --login -o igncr '{0}'
         run: |
@@ -62,13 +77,16 @@ jobs:
           # build_cygwin/ enthaelt epk2extract.exe + die portablen cyg*.dll
           cp -r build_cygwin/* dist/epk2extract-windows-x86_64/
           cp -r keys dist/epk2extract-windows-x86_64/ 2>/dev/null || true
-          # unsquashfs.exe + dessen Cygwin-Laufzeit-DLLs mitnehmen (portable)
-          cp /usr/bin/unsquashfs.exe dist/epk2extract-windows-x86_64/ 2>/dev/null || true
+          # selbst gebautes unsquashfs.exe dazu
+          cp sqfs/squashfs-tools/unsquashfs.exe dist/epk2extract-windows-x86_64/ \
+            || cp sqfs/squashfs-tools/unsquashfs dist/epk2extract-windows-x86_64/unsquashfs.exe
+          # alle noetigen Cygwin-Laufzeit-DLLs portabel mitnehmen
           for d in cygwin1.dll cygz.dll cyglzo2-2.dll cyggcc_s-seh-1.dll \
                    cygstdc++-6.dll cygcrypto-1.1.dll cygcrypto-3.dll \
                    cyglzma-5.dll cygbz2-1.dll cyglz4-1.dll cygzstd-1.dll; do
             cp "/usr/bin/$d" dist/epk2extract-windows-x86_64/ 2>/dev/null || true
           done
+          echo "== Archiv-Inhalt (Kurzcheck) =="; ls dist/epk2extract-windows-x86_64/ | grep -iE 'epk2extract\.exe|unsquashfs\.exe'
           tar czf dist/epk2extract-windows-x86_64.tar.gz -C dist epk2extract-windows-x86_64
       - uses: actions/upload-artifact@v4
         with:
