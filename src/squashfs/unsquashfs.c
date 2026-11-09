@@ -2258,7 +2258,7 @@ int is_squashfs(char *filename) {
 	return result;
 }
 
-int unsquashfs(char *squashfs, char *dest) {
+int unsquashfs(char *squashfs, char *dest, char *extract_list) {
 	int stat_sys = FALSE;
 	struct pathnames *paths = NULL;
 	struct pathname *path = NULL;
@@ -2367,6 +2367,11 @@ int unsquashfs(char *squashfs, char *dest) {
 
 	if (read_xattrs_from_disk(fd, &sBlk.s) == 0)
 		EXIT_UNSQUASH("failed to read the xattr table\n");
+
+	/* Selektives Entpacken: Pfadliste aus Datei lesen (wie unsquashfs -ef).
+	 * Ohne -f bleibt path == NULL -> alles entpacken (altes Verhalten). */
+	if (extract_list)
+		path = process_extract_files(path, extract_list);
 
 	if (path) {
 		paths = init_subdir();
