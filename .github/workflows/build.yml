@@ -75,6 +75,11 @@ jobs:
           if [ -f sqfs/squashfs-tools/nprocessors_compat.c ]; then
             sed -i '0,/^#ifdef __linux__$/ s//#if defined(__CYGWIN__)\n#include <unistd.h>\nint get_nprocessors(void) { if (processors != -1) return processors; long n = sysconf(_SC_NPROCESSORS_ONLN); return processors = (n > 0 ? (int) n : 1); }\n#elif defined(__linux__)/' sqfs/squashfs-tools/nprocessors_compat.c
           fi
+          # 4.6.1: unsquashfs.c bindet/benutzt bei Nicht-Linux sysctl (Cygwin
+          # fehlt sys/sysctl.h). Cygwin-Zweig via sysconf einziehen (anker-
+          # basiert; no-op wenn Muster fehlt).
+          perl -0pi -e 's|#include <sys/sysmacros\.h>\r?\n#else\r?\n#include <sys/sysctl\.h>|#include <sys/sysmacros.h>\n#elif defined(__CYGWIN__)\n#include <unistd.h>\n#else\n#include <sys/sysctl.h>|' sqfs/squashfs-tools/unsquashfs.c
+          perl -0pi -e 's|processors = CPU_COUNT\(&cpu_set\);\r?\n#else|processors = CPU_COUNT(&cpu_set);\n#elif defined(__CYGWIN__)\n\t\tprocessors = sysconf(_SC_NPROCESSORS_ONLN);\n\t\tif(processors < 1)\n\t\t\tprocessors = 1;\n#else|' sqfs/squashfs-tools/unsquashfs.c
           # XATTR aus (Cygwin fehlt sys/xattr.h); Kompressoren an.
           # EXTRA_CFLAGS: Cygwins GCC (>=14) macht aus impliziter Funktions-
           # deklaration / int-conversion harte Fehler (auf Ubuntu-GCC-11 nur
