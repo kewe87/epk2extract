@@ -13,6 +13,7 @@ typedef struct {
 	int enableSignatureChecking;
 	bool noAutoUnsquashfs;
 	bool signatureOnly;
+	char *extractList;	/* optionale Datei mit Pfadliste fuer selektives unsquashfs (-f) */
 } config_opts_t;
 
 extern config_opts_t config_opts;

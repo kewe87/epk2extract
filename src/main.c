@@ -107,7 +107,7 @@ int handle_file(char *file, config_opts_t *config_opts) {
 			asprintf(&dest_file, "%s/%s.unsquashfs", dest_dir, file_name);
 			printf("UnSQUASHFS file to: %s\n", dest_file);
 			rmrf(dest_file);
-			unsquashfs(file, dest_file);
+			unsquashfs(file, dest_file, config_opts->extractList);
 		} else {
 			puts("Not UnSQUASHFSing");
 		}
@@ -242,9 +242,10 @@ int main(int argc, char *argv[]) {
 	config_opts.enableSignatureChecking = 0;
 	config_opts.noAutoUnsquashfs = false;
 	config_opts.signatureOnly = false;
+	config_opts.extractList = NULL;
 
 	int opt;
-	while ((opt = getopt(argc, argv, "csnS")) != -1) {
+	while ((opt = getopt(argc, argv, "csnSf:")) != -1) {
 		switch (opt) {
 		case 's':{
 			config_opts.enableSignatureChecking = 1;
@@ -256,6 +257,10 @@ int main(int argc, char *argv[]) {
 			}
 		case 'n':{
 				config_opts.noAutoUnsquashfs = true;
+				break;
+			 }
+		case 'f':{
+				config_opts.extractList = optarg;
 				break;
 			 }
 		case 'S':{
