@@ -325,6 +325,12 @@ static int print_usage(void) {
 	printf("  -c : extract to current directory instead of source file directory\n");
 	printf("  -s : enable signature checking for EPK files\n");
 	printf("  -S : only check signature (implies -s)\n");
-	printf("  -n : no automatic unsquashfs\n\n");
+	printf("  -n : no automatic unsquashfs\n");
+	printf("  -f <file> : selective unsquashfs - extract ONLY the paths listed in\n");
+	printf("              <file> (one squashfs-internal path per line, like\n");
+	printf("              unsquashfs -ef). Without -f the whole filesystem is extracted.\n\n");
+	printf("This is a community fork of openlgtv/epk2extract; the -f option was added\n");
+	printf("for Overlay Studio (selective firmware-file extraction). Upstream:\n");
+	printf("  https://github.com/openlgtv/epk2extract\n\n");
 	return err_ret(NULL);
 }
