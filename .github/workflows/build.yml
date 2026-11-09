@@ -1,34 +1,95 @@
-name: SonarQube
+name: Build Binaries
+
 on:
   push:
-    branches:
-      - master
-      - develop
-  pull_request:
-    types: [opened, synchronize, reopened]
+    branches: [master, main]
+    tags: ["v*", "overlay-*"]
+  workflow_dispatch:
+
 jobs:
-  build:
-    name: Build and analyze
-    runs-on: ubuntu-latest
-    env:
-      BUILD_WRAPPER_OUT_DIR: build_wrapper_output_directory # Directory where build-wrapper output will be placed
+  linux:
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
-      - name: Install Dependencies
+      - name: Install deps
         run: |
-          sudo apt-get install -y git build-essential cmake liblzo2-dev libssl-dev libc6-dev
-      - name: Install Build Wrapper
-        uses: SonarSource/sonarqube-scan-action/install-build-wrapper@v5
-      - name: Run Build Wrapper
+          sudo apt-get update
+          sudo apt-get install -y cmake build-essential liblzo2-dev libssl-dev zlib1g-dev squashfs-tools
+      - name: Build
+        run: ./build.sh
+      - name: Package
         run: |
-          build-wrapper-linux-x86-64 --out-dir ${{ env.BUILD_WRAPPER_OUT_DIR }} ./build.sh
-      - name: SonarQube Scan
-        uses: SonarSource/sonarqube-scan-action@v5
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          mkdir -p dist/epk2extract-linux-x86_64
+          cp build_linux/epk2extract dist/epk2extract-linux-x86_64/
+          cp -r keys dist/epk2extract-linux-x86_64/
+          # unsquashfs + libs bündeln, damit die Nutzer nicht noch squashfs-tools brauchen
+          cp "$(command -v unsquashfs)" dist/epk2extract-linux-x86_64/ || true
+          cd dist && tar czf epk2extract-linux-x86_64.tar.gz epk2extract-linux-x86_64/
+      - uses: actions/upload-artifact@v4
         with:
-          args: >
-            --define sonar.cfamily.compile-commands="${{ env.BUILD_WRAPPER_OUT_DIR }}/compile_commands.json"
+          name: epk2extract-linux-x86_64
+          path: dist/epk2extract-linux-x86_64.tar.gz
 
+  windows:
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-make
+            mingw-w64-x86_64-lzo2
+            mingw-w64-x86_64-openssl
+            mingw-w64-x86_64-zlib
+            squashfs-tools
+            tar
+            git
+      - name: Build
+        run: |
+          mkdir -p build_mingw/obj
+          cd build_mingw/obj
+          cmake -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release ../..
+          mingw32-make -j2
+      - name: Package
+        run: |
+          mkdir -p dist/epk2extract-windows-x86_64
+          cp build_mingw/obj/src/epk2extract.exe dist/epk2extract-windows-x86_64/
+          cp -r keys dist/epk2extract-windows-x86_64/
+          # DLLs einsammeln (mingw-Deps)
+          for dll in libgcc_s_seh-1.dll libstdc++-6.dll libwinpthread-1.dll \
+                    liblzo2-2.dll libcrypto-3-x64.dll zlib1.dll; do
+            if [ -f "/mingw64/bin/$dll" ]; then
+              cp "/mingw64/bin/$dll" dist/epk2extract-windows-x86_64/
+            fi
+          done
+          # unsquashfs mitnehmen falls das Paket es liefert
+          cp /usr/bin/unsquashfs.exe dist/epk2extract-windows-x86_64/ 2>/dev/null || true
+          cd dist && tar czf epk2extract-windows-x86_64.tar.gz epk2extract-windows-x86_64/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: epk2extract-windows-x86_64
+          path: dist/epk2extract-windows-x86_64.tar.gz
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [linux, windows]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { name: epk2extract-linux-x86_64, path: artifacts }
+      - uses: actions/download-artifact@v4
+        with: { name: epk2extract-windows-x86_64, path: artifacts }
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*.tar.gz
+          generate_release_notes: true
+          draft: false
