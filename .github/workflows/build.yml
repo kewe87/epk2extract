@@ -68,10 +68,13 @@ jobs:
           # Stabilen Release-Tag nehmen (dev-Branch ist instabil: inline-xattr
           # referenziert read_fs_bytes auch bei XATTR_SUPPORT=0 -> Link-Fehler).
           git clone --depth 1 --branch 4.6.1 https://github.com/plougher/squashfs-tools.git sqfs
-          # Cygwin-Portabilitaet: nprocessors_compat.c bindet bei Nicht-Linux
-          # <sys/sysctl.h> ein (fehlt in Cygwin). Eigenen Cygwin-Zweig via
-          # sysconf(_SC_NPROCESSORS_ONLN) vor den __linux__-Block setzen.
-          sed -i '0,/^#ifdef __linux__$/ s//#if defined(__CYGWIN__)\n#include <unistd.h>\nint get_nprocessors(void) { if (processors != -1) return processors; long n = sysconf(_SC_NPROCESSORS_ONLN); return processors = (n > 0 ? (int) n : 1); }\n#elif defined(__linux__)/' sqfs/squashfs-tools/nprocessors_compat.c
+          # Cygwin-Portabilitaet: falls nprocessors_compat.c existiert (neuere
+          # Versionen), bindet es bei Nicht-Linux <sys/sysctl.h> ein (fehlt in
+          # Cygwin) -> Cygwin-Zweig via sysconf vor den __linux__-Block setzen.
+          # 4.6.1 hat die Datei nicht -> Patch nur bedingt.
+          if [ -f sqfs/squashfs-tools/nprocessors_compat.c ]; then
+            sed -i '0,/^#ifdef __linux__$/ s//#if defined(__CYGWIN__)\n#include <unistd.h>\nint get_nprocessors(void) { if (processors != -1) return processors; long n = sysconf(_SC_NPROCESSORS_ONLN); return processors = (n > 0 ? (int) n : 1); }\n#elif defined(__linux__)/' sqfs/squashfs-tools/nprocessors_compat.c
+          fi
           # XATTR aus (Cygwin fehlt sys/xattr.h); Kompressoren an.
           # EXTRA_CFLAGS: Cygwins GCC (>=14) macht aus impliziter Funktions-
           # deklaration / int-conversion harte Fehler (auf Ubuntu-GCC-11 nur
