@@ -71,9 +71,13 @@ jobs:
           # sysconf(_SC_NPROCESSORS_ONLN) vor den __linux__-Block setzen.
           sed -i '0,/^#ifdef __linux__$/ s//#if defined(__CYGWIN__)\n#include <unistd.h>\nint get_nprocessors(void) { if (processors != -1) return processors; long n = sysconf(_SC_NPROCESSORS_ONLN); return processors = (n > 0 ? (int) n : 1); }\n#elif defined(__linux__)/' sqfs/squashfs-tools/nprocessors_compat.c
           # XATTR aus (Cygwin fehlt sys/xattr.h); Kompressoren an.
+          # EXTRA_CFLAGS: Cygwins GCC (>=14) macht aus impliziter Funktions-
+          # deklaration / int-conversion harte Fehler (auf Ubuntu-GCC-11 nur
+          # Warnungen). Zuruecksetzen, damit der aeltere C-Code durchbaut.
           make -C sqfs/squashfs-tools \
             GZIP_SUPPORT=1 XZ_SUPPORT=1 LZO_SUPPORT=1 LZ4_SUPPORT=1 ZSTD_SUPPORT=1 \
             XATTR_SUPPORT=0 \
+            EXTRA_CFLAGS="-Wno-implicit-function-declaration -Wno-int-conversion" \
             unsquashfs
           ls -la sqfs/squashfs-tools/unsquashfs* || true
           test -f sqfs/squashfs-tools/unsquashfs.exe || test -f sqfs/squashfs-tools/unsquashfs
